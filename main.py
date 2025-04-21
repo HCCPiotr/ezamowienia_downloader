@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from os import makedirs
 
 from requests import get
