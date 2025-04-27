@@ -2,9 +2,9 @@
 
 from os import makedirs
 
+from tqdm import tqdm
 from requests import get
 from json import dump
-
 
 API_BASE = "https://ezamowienia.gov.pl/mp-readmodels/api"
 
@@ -16,15 +16,24 @@ def get_tender(id: str) -> dict:
 
 
 def save_attachment(
-    tender_id: str, attachment_id: str, path: str, chunk_size: int = 1024 * 1024
+    tender_id: str,
+    attachment_id: str,
+    path: str,
+    *,
+    chunk_size: int = 1024 * 1024 * 5,
+    total_size: int | None = None,
 ):
     req = get(
-        f"{API_BASE}/Tender/DownloadDocument/{tender_id}/{attachment_id}",
+        f"{API_BASE}/Tender/DownloadDocument/{tender_id}/{attachment_id}", stream=True
     )
     req.raise_for_status()
-    with open(path, "wb") as f:
-        for chunk in req.iter_content(chunk_size):
-            f.write(chunk)
+    with tqdm(
+        total=total_size, unit="B", unit_scale=True, desc=path.split("/")[-1]
+    ) as progress_bar:
+        with open(path, "wb") as f:
+            for chunk in req.iter_content(chunk_size):
+                progress_bar.update(len(chunk))
+                f.write(chunk)
 
 
 def save_tender(id: str, base_path: str | None):
@@ -39,13 +48,11 @@ def save_tender(id: str, base_path: str | None):
                 f"attachment {n}/{len(tender["tenderDocuments"])} was deleted: {attachment["objectId"]}:{attachment["attachment"]["hash"]}:{attachment["attachment"]["fileName"]} -> {attachment["attachment"]["fileSize"]} bytes"
             )
             continue
-        print(
-            f"downloading attachment {n}/{len(tender["tenderDocuments"])}: {attachment["objectId"]}:{attachment["attachment"]["hash"]}:{attachment["attachment"]["fileName"]} -> {attachment["attachment"]["fileSize"]} bytes"
-        )
         save_attachment(
             id,
             attachment["objectId"],
             f"{base_path}/attachments/{attachment["attachment"]["fileName"]}",
+            total_size=attachment["attachment"]["fileSize"]
         )
 
     with open(f"{base_path}/data.json", "w") as f:
